@@ -6,7 +6,7 @@ canvas.height = window.innerHeight;
 
 const numStars = 1000;
 const stars = [];
-let speed = 5;
+let speed = 4;
 
 function initStars() {
     for (let i = 0; i < numStars; i++) {
