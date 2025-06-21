@@ -1,3 +1,4 @@
+// 3D Comet-like Shapes in Elegant Space Scene with Enhanced Interaction
 const canvas = document.getElementById('starfield');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -50,11 +51,13 @@ canvas.addEventListener('mouseup', () => {
 });
 
 function project(x, y, z) {
-    const scale = FOV / (FOV + z);
+    const rawScale = FOV / (FOV + z);
+    const scale = Math.max(0.05, Math.min(rawScale, 2.5));
     return {
-        x: x * scale + canvas.width / 2,
-        y: y * scale + canvas.height / 2,
-        scale
+        x: x * rawScale + canvas.width / 2,
+        y: y * rawScale + canvas.height / 2,
+        scale,
+        rawScale
     };
 }
 
@@ -147,39 +150,6 @@ function getVertices(type, size, rot) {
     return v;
 }
 
-function getEdges(type) {
-    switch (type) {
-        case 'cube':
-            return [
-                [0,1],[1,3],[3,2],[2,0],
-                [4,5],[5,7],[7,6],[6,4],
-                [0,4],[1,5],[2,6],[3,7]
-            ];
-        case 'tetrahedron':
-            return [
-                [0,1],[0,2],[0,3],
-                [1,2],[2,3],[3,1]
-            ];
-        case 'octahedron':
-            return [
-                [0,2],[0,3],[0,4],[0,5],
-                [1,2],[1,3],[1,4],[1,5],
-                [2,4],[4,3],[3,5],[5,2]
-            ];
-        case 'pyramid':
-            return [
-                [0,1],[1,2],[2,3],[3,0],
-                [0,4],[1,4],[2,4],[3,4]
-            ];
-        case 'prism':
-            return [
-                [0,1],[1,2],[2,0],
-                [3,4],[4,5],[5,3],
-                [0,3],[1,4],[2,5]
-            ];
-    }
-}
-
 function update() {
     stars.forEach(s => {
         s.z -= s.speed;
@@ -197,7 +167,7 @@ function update() {
         if (c.trail.length > 20) c.trail.shift();
     });
     for (let i = comets.length - 1; i >= 0; i--) {
-        if (comets[i].z < -500) comets[i] = createComet();
+        if (comets[i].z < -FOV - 500) comets[i] = createComet();
     }
 }
 
@@ -214,13 +184,11 @@ function draw() {
     });
 
     comets.forEach(c => {
-        const fade = Math.max(0, Math.min(1, (2200 - c.z) / 800));
-        
-        if (c.z < 10) return;
+        if (c.z < -1000) return;
 
         const proj = project(c.x, c.y, c.z);
-        const scale = Math.min(proj.scale, 2.5);
-
+        const scale = proj.scale;
+        const fade = Math.max(0, Math.min(1, (2200 - c.z) / 800));
 
         for (let i = c.trail.length - 1; i > 0; i--) {
             const p1 = c.trail[i], p2 = c.trail[i - 1];
@@ -236,21 +204,34 @@ function draw() {
             x: v.x + c.x,
             y: v.y + c.y,
             z: v.z + c.z
-        })).map(p => project(p.x, p.y, p.z));
+        }));
 
         const edges = getEdges(c.type);
         ctx.strokeStyle = `rgba(255,255,255,${fade})`;
         ctx.lineWidth = 0.5 * scale;
 
-        edges.forEach(([a,b]) => {
-            if (verts[a] && verts[b]) {
+        edges.forEach(([a, b]) => {
+            const pa = project(verts[a].x, verts[a].y, verts[a].z);
+            const pb = project(verts[b].x, verts[b].y, verts[b].z);
+            if (isFinite(pa.x) && isFinite(pa.y) && isFinite(pb.x) && isFinite(pb.y)) {
                 ctx.beginPath();
-                ctx.moveTo(verts[a].x, verts[a].y);
-                ctx.lineTo(verts[b].x, verts[b].y);
+                ctx.moveTo(pa.x, pa.y);
+                ctx.lineTo(pb.x, pb.y);
                 ctx.stroke();
             }
         });
     });
+}
+
+function getEdges(type) {
+    switch (type) {
+        case 'cube': return [[0,1],[1,3],[3,2],[2,0],[4,5],[5,7],[7,6],[6,4],[0,4],[1,5],[2,6],[3,7]];
+        case 'tetrahedron': return [[0,1],[0,2],[0,3],[1,2],[2,3],[3,1]];
+        case 'octahedron': return [[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[4,3],[3,5],[5,2]];
+        case 'pyramid': return [[0,1],[1,2],[2,3],[3,0],[0,4],[1,4],[2,4],[3,4]];
+        case 'prism': return [[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[0,3],[1,4],[2,5]];
+        default: return [];
+    }
 }
 
 function animate() {
