@@ -240,7 +240,7 @@ function draw() {
 
         const edges = getEdges(c.type);
         ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 0.5;
 
         edges.forEach(([a, b]) => {
             const pa = project(worldVerts[a].x, worldVerts[a].y, worldVerts[a].z);
