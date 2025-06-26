@@ -7,6 +7,7 @@ const FOV = 600;
 const NUM_STARS = 500;
 const NUM_COMETS = 6;
 const cometShapes = ['cube', 'tetrahedron', 'octahedron', 'pyramid', 'prism'];
+const starColors = ['#FFFFFF', '#B4C5E4', '#FFDDAA', '#FBF2E3']; // White, Pale Blue, Soft Yellow, Faint White
 const stars = [], comets = [];
 let selectedComet = null;
 let isDragging = false;
@@ -144,7 +145,8 @@ function createStar() {
         y: Math.random() * 4000 - 2000,
         z: Math.random() * 2000 + 100,
         speed: 0.5 + Math.random() * 1.5,
-        size: 1 + Math.random() * 1.5
+        size: 1 + Math.random() * 1.5,
+        color: starColors[Math.floor(Math.random() * starColors.length)]
     };
 }
 
@@ -207,7 +209,13 @@ function draw() {
     stars.forEach(s => {
         const p = project(s.x, s.y, s.z);
         if (p) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${1 - s.z / 2000})`;
+            const alpha = 1 - s.z / 2000;
+            // Convert hex to rgba to apply alpha
+            const r = parseInt(s.color.slice(1, 3), 16);
+            const g = parseInt(s.color.slice(3, 5), 16);
+            const b = parseInt(s.color.slice(5, 7), 16);
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            
             ctx.beginPath();
             ctx.arc(p.x, p.y, s.size * p.scale, 0, Math.PI * 2);
             ctx.fill();
