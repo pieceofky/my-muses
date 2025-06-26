@@ -144,7 +144,7 @@ function createStar() {
         y: Math.random() * 4000 - 2000,
         z: Math.random() * 2000 + 100,
         speed: 0.5 + Math.random() * 1.5,
-        size: 0.5 + Math.random()
+        size: 1 + Math.random() * 1.5
     };
 }
 
