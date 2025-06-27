@@ -18,6 +18,9 @@ let isCameraDragging = false;
 let cameraRotation = { x: 0, y: 0 };
 let lastCameraMouse = { x: 0, y: 0 };
 
+// New variable for zoom functionality
+let zoom = 1;
+
 
 canvas.addEventListener('mousedown', e => {
     const mx = e.clientX;
@@ -79,6 +82,15 @@ canvas.addEventListener('mouseup', () => {
     isCameraDragging = false;
 });
 
+// Event listener for the mouse wheel to control zoom
+canvas.addEventListener('wheel', e => {
+    e.preventDefault(); // Prevents the page from scrolling
+    const zoomAmount = e.deltaY * -0.001;
+    zoom += zoomAmount;
+    zoom = Math.max(0.5, Math.min(4, zoom)); // Clamp the zoom level between 0.5x and 4x
+});
+
+
 window.addEventListener('resize', () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -95,11 +107,15 @@ function project(x, y, z) {
     let rz2 = -x * Math.sin(rotY) + rz1 * Math.cos(rotY);
 
     const transformedZ = rz2;
-    if (transformedZ < -FOV + 10) {
+    
+    // Apply zoom by adjusting the Field of View
+    const effectiveFOV = FOV * zoom;
+
+    if (transformedZ < -effectiveFOV + 10) {
         return null;
     }
 
-    const rawScale = FOV / (FOV + transformedZ);
+    const rawScale = effectiveFOV / (effectiveFOV + transformedZ);
     const scale = Math.max(0.05, Math.min(rawScale, 2.5));
     return {
         x: rx2 * rawScale + canvas.width / 2,
@@ -230,7 +246,9 @@ function update() {
         });
 
         for (let i = comets.length - 1; i >= 0; i--) {
-            if (comets[i].z < -FOV - 500) {
+            // Adjust respawn depth based on zoom to avoid pop-in
+            const respawnDepth = (FOV * zoom) + 500;
+            if (comets[i].z < -respawnDepth) {
                 comets[i] = createComet();
             }
         }
@@ -254,7 +272,7 @@ function draw() {
     stars.forEach(s => {
         const p = project(s.x, s.y, s.z);
         if (p) {
-            const twinkleFactor = (Math.sin(s.twinklePhase) + 1) / 2 * 0.5 + 0.5; // Varies between 0.5 and 1
+            const twinkleFactor = (Math.sin(s.twinklePhase) + 1) / 2 * 0.5 + 0.5;
             const baseAlpha = 1 - p.cameraZ / 2000;
             const alpha = baseAlpha * twinkleFactor;
             
