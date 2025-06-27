@@ -183,7 +183,9 @@ function createStar() {
         z: Math.random() * 2000 + 100,
         speed: 0.5 + Math.random() * 1.5,
         size: 1 + Math.random() * 1.5,
-        color: starColors[Math.floor(Math.random() * starColors.length)]
+        color: starColors[Math.floor(Math.random() * starColors.length)],
+        twinkleSpeed: Math.random() * 0.05,
+        twinklePhase: Math.random() * Math.PI * 2,
     };
 }
 
@@ -202,7 +204,8 @@ function createComet() {
             y: (Math.random() - 0.5) * 0.01,
             z: (Math.random() - 0.5) * 0.01
         },
-        trail: []
+        trail: [],
+        trailLength: 30 + Math.random() * 20,
     };
 }
 
@@ -210,6 +213,7 @@ function update() {
     if (!isCameraDragging) {
         stars.forEach(s => {
             s.z -= s.speed;
+            s.twinklePhase += s.twinkleSpeed;
             if (s.z < 1) {
                 Object.assign(s, createStar());
                 s.z = 2000;
@@ -236,12 +240,11 @@ function update() {
         const center = project(c.x, c.y, c.z);
         if (center) {
             c.trail.push(center);
-            if (c.trail.length > 20) c.trail.shift();
+            if (c.trail.length > c.trailLength) c.trail.shift();
         } else {
             if (c.trail.length > 0) c.trail.shift();
         }
     });
-
 }
 
 function draw() {
@@ -251,7 +254,10 @@ function draw() {
     stars.forEach(s => {
         const p = project(s.x, s.y, s.z);
         if (p) {
-            const alpha = 1 - p.cameraZ / 2000;
+            const twinkleFactor = (Math.sin(s.twinklePhase) + 1) / 2 * 0.5 + 0.5; // Varies between 0.5 and 1
+            const baseAlpha = 1 - p.cameraZ / 2000;
+            const alpha = baseAlpha * twinkleFactor;
+            
             const r = parseInt(s.color.slice(1, 3), 16);
             const g = parseInt(s.color.slice(3, 5), 16);
             const b = parseInt(s.color.slice(5, 7), 16);
@@ -282,16 +288,21 @@ function draw() {
         if (fade <= 0) return;
         
         if (c.trail.length > 1) {
-            ctx.lineWidth = 0.5;
-            for (let i = c.trail.length - 1; i > 0; i--) {
-                const p1 = c.trail[i];
-                const p2 = c.trail[i - 1];
-                ctx.strokeStyle = `rgba(255, 255, 255, ${(i / c.trail.length) * fade * 0.5})`;
-                ctx.beginPath();
-                ctx.moveTo(p1.x, p1.y);
-                ctx.lineTo(p2.x, p2.y);
-                ctx.stroke();
+            const head = c.trail[c.trail.length - 1];
+            const tail = c.trail[0];
+            const gradient = ctx.createLinearGradient(head.x, head.y, tail.x, tail.y);
+            gradient.addColorStop(0, `rgba(255, 255, 200, ${fade * 0.8})`);
+            gradient.addColorStop(0.5, `rgba(255, 150, 0, ${fade * 0.5})`);
+            gradient.addColorStop(1, `rgba(255, 0, 0, 0)`);
+
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(head.x, head.y);
+            for (let i = c.trail.length - 2; i >= 0; i--) {
+                ctx.lineTo(c.trail[i].x, c.trail[i].y);
             }
+            ctx.stroke();
         }
 
         const edges = getEdges(c.type);
