@@ -7,15 +7,23 @@ const FOV = 600;
 const NUM_STARS = 500;
 const NUM_COMETS = 6;
 const cometShapes = ['cube', 'tetrahedron', 'octahedron', 'pyramid', 'prism'];
-const starColors = ['#FFFFFF', '#B4C5E4', '#FFDDAA', '#FBF2E3']; // White, Pale Blue, Soft Yellow, Faint White
+const starColors = ['#FFFFFF', '#B4C5E4', '#FFDDAA', '#FBF2E3'];
 const stars = [], comets = [];
+
 let selectedComet = null;
 let isDragging = false;
 let lastMouse = { x: 0, y: 0 };
 
+let isCameraDragging = false;
+let cameraRotation = { x: 0, y: 0 };
+let lastCameraMouse = { x: 0, y: 0 };
+
+
 canvas.addEventListener('mousedown', e => {
     const mx = e.clientX;
     const my = e.clientY;
+    let cometClicked = false;
+
     for (let c of comets) {
         const p = project(c.x, c.y, c.z);
         if (p) {
@@ -25,9 +33,16 @@ canvas.addEventListener('mousedown', e => {
                 lastMouse.x = mx;
                 lastMouse.y = my;
                 isDragging = true;
+                cometClicked = true;
                 break;
             }
         }
+    }
+
+    if (!cometClicked) {
+        isCameraDragging = true;
+        lastCameraMouse.x = mx;
+        lastCameraMouse.y = my;
     }
 });
 
@@ -44,12 +59,24 @@ canvas.addEventListener('mousemove', e => {
 
         lastMouse.x = e.clientX;
         lastMouse.y = e.clientY;
+    } else if (isCameraDragging) {
+        const dx = e.clientX - lastCameraMouse.x;
+        const dy = e.clientY - lastCameraMouse.y;
+        
+        cameraRotation.y += dx * 0.005;
+        cameraRotation.x += dy * 0.005;
+        
+        cameraRotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, cameraRotation.x));
+
+        lastCameraMouse.x = e.clientX;
+        lastCameraMouse.y = e.clientY;
     }
 });
 
 canvas.addEventListener('mouseup', () => {
     selectedComet = null;
     isDragging = false;
+    isCameraDragging = false;
 });
 
 window.addEventListener('resize', () => {
@@ -58,17 +85,27 @@ window.addEventListener('resize', () => {
 });
 
 function project(x, y, z) {
-    if (z < -FOV + 10) {
+    let rotX = cameraRotation.x;
+    let rotY = cameraRotation.y;
+
+    let rz1 = y * Math.sin(rotX) + z * Math.cos(rotX);
+    let ry1 = y * Math.cos(rotX) - z * Math.sin(rotX);
+    
+    let rx2 = x * Math.cos(rotY) + rz1 * Math.sin(rotY);
+    let rz2 = -x * Math.sin(rotY) + rz1 * Math.cos(rotY);
+
+    const transformedZ = rz2;
+    if (transformedZ < -FOV + 10) {
         return null;
     }
 
-    const rawScale = FOV / (FOV + z);
+    const rawScale = FOV / (FOV + transformedZ);
     const scale = Math.max(0.05, Math.min(rawScale, 2.5));
     return {
-        x: x * rawScale + canvas.width / 2,
-        y: y * rawScale + canvas.height / 2,
+        x: rx2 * rawScale + canvas.width / 2,
+        y: ry1 * rawScale + canvas.height / 2,
         scale,
-        rawScale
+        cameraZ: transformedZ
     };
 }
 
@@ -170,22 +207,32 @@ function createComet() {
 }
 
 function update() {
-    stars.forEach(s => {
-        s.z -= s.speed;
-        if (s.z < 1) {
-            Object.assign(s, createStar());
-            s.z = 2000;
-        }
-    });
+    if (!isCameraDragging) {
+        stars.forEach(s => {
+            s.z -= s.speed;
+            if (s.z < 1) {
+                Object.assign(s, createStar());
+                s.z = 2000;
+            }
+        });
 
+        comets.forEach(c => {
+            if (!isDragging || selectedComet !== c) {
+                c.z -= c.speed;
+                c.rotation.x += c.rotationSpeed.x;
+                c.rotation.y += c.rotationSpeed.y;
+                c.rotation.z += c.rotationSpeed.z;
+            }
+        });
+
+        for (let i = comets.length - 1; i >= 0; i--) {
+            if (comets[i].z < -FOV - 500) {
+                comets[i] = createComet();
+            }
+        }
+    }
+    
     comets.forEach(c => {
-        if (!isDragging || selectedComet !== c) {
-            c.z -= c.speed;
-            c.rotation.x += c.rotationSpeed.x;
-            c.rotation.y += c.rotationSpeed.y;
-            c.rotation.z += c.rotationSpeed.z;
-        }
-
         const center = project(c.x, c.y, c.z);
         if (center) {
             c.trail.push(center);
@@ -195,11 +242,6 @@ function update() {
         }
     });
 
-    for (let i = comets.length - 1; i >= 0; i--) {
-        if (comets[i].z < -FOV - 500) {
-            comets[i] = createComet();
-        }
-    }
 }
 
 function draw() {
@@ -209,8 +251,7 @@ function draw() {
     stars.forEach(s => {
         const p = project(s.x, s.y, s.z);
         if (p) {
-            const alpha = 1 - s.z / 2000;
-            // Convert hex to rgba to apply alpha
+            const alpha = 1 - p.cameraZ / 2000;
             const r = parseInt(s.color.slice(1, 3), 16);
             const g = parseInt(s.color.slice(3, 5), 16);
             const b = parseInt(s.color.slice(5, 7), 16);
@@ -223,9 +264,23 @@ function draw() {
     });
 
     comets.forEach(c => {
-        const fade = Math.max(0, Math.min(1, (2200 - c.z) / 800));
-        if (fade <= 0) return;
+        const localVerts = getVertices(c.type, c.size, c.rotation);
+        const worldVerts = localVerts.map(v => ({
+            x: v.x + c.x,
+            y: v.y + c.y,
+            z: v.z + c.z
+        }));
+        
+        const projectedVerts = worldVerts.map(v => project(v.x, v.y, v.z));
+        const visibleVerts = projectedVerts.filter(p => p !== null);
 
+        if (visibleVerts.length === 0) return;
+
+        const avgZ = visibleVerts.reduce((sum, p) => sum + p.cameraZ, 0) / visibleVerts.length;
+        const fade = Math.max(0, Math.min(1, (1500 - avgZ) / 800));
+        
+        if (fade <= 0) return;
+        
         if (c.trail.length > 1) {
             ctx.lineWidth = 0.5;
             for (let i = c.trail.length - 1; i > 0; i--) {
@@ -239,20 +294,13 @@ function draw() {
             }
         }
 
-        const localVerts = getVertices(c.type, c.size, c.rotation);
-        const worldVerts = localVerts.map(v => ({
-            x: v.x + c.x,
-            y: v.y + c.y,
-            z: v.z + c.z
-        }));
-
         const edges = getEdges(c.type);
         ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
         ctx.lineWidth = 0.5;
 
         edges.forEach(([a, b]) => {
-            const pa = project(worldVerts[a].x, worldVerts[a].y, worldVerts[a].z);
-            const pb = project(worldVerts[b].x, worldVerts[b].y, worldVerts[b].z);
+            const pa = projectedVerts[a];
+            const pb = projectedVerts[b];
 
             if (pa && pb) {
                 ctx.beginPath();
